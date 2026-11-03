@@ -145,6 +145,8 @@ export function ChartStage({
   selectedVessel,
   onSelectVessel,
   onCycleVessel,
+  timeScale,
+  onTimeScale,
   liveAis,
   liveAisOn,
   onToggleLiveAis,
@@ -160,6 +162,8 @@ export function ChartStage({
   selectedVessel: Vessel
   onSelectVessel: (id: string) => void
   onCycleVessel: (direction: -1 | 1) => void
+  timeScale: number
+  onTimeScale: (value: number) => void
   liveAis: LiveAisState
   liveAisOn: boolean
   onToggleLiveAis: () => void
@@ -250,6 +254,7 @@ export function ChartStage({
           onSelectVessel={onSelectVessel}
           onSelectChokepoint={onSelectChokepoint}
           reconProgress={reconProgress}
+          timeScale={timeScale}
           onMapReady={setMapInstance}
         />
 
@@ -302,6 +307,27 @@ export function ChartStage({
             </span>
           </div>
         </div>
+
+        {mode !== 'recon' && mode !== 'world' && (
+          <div className="time-scale-control">
+            <span className="time-scale-label">TIME</span>
+            {[
+              { value: 1, label: '1×', title: '真实速度：8 节的船 1 分钟移动约 1 像素' },
+              { value: 60, label: '60×', title: '1 分钟 = 1 小时，全程约 11 分钟' },
+              { value: 600, label: '600×', title: '6 秒 = 1 小时，全程约 65 秒' },
+            ].map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={timeScale === option.value ? 'is-active' : ''}
+                onClick={() => onTimeScale(option.value)}
+                title={option.title}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className={`live-ais-pill ${liveAisOn ? 'is-on' : ''}`}>
           <button type="button" className="live-ais-toggle" onClick={onToggleLiveAis}>

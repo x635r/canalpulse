@@ -19,7 +19,7 @@ import type { Chokepoint, ChokepointId, MapMode, Vessel } from '../types'
 import { everGiven } from '../data/blockade'
 import { vesselTypes } from '../data/fleet'
 import { chokepoints } from '../data/chokepoints'
-import { bearingBetween, circlePolygon, clamp, pointAlong } from '../lib/geo'
+import { bearingBetween, circlePolygon, clamp, pathLength, pointAlong } from '../lib/geo'
 import { getReconState } from '../lib/blockade'
 import { chartStyle } from '../lib/mapStyle'
 
@@ -41,6 +41,8 @@ interface MapCanvasProps {
   onSelectVessel: (id: string) => void
   onSelectChokepoint?: (id: ChokepointId) => void
   reconProgress: number
+  /** Playback multiplier over real time. 1 = true real-time. */
+  timeScale: number
   onMapReady?: (map: MapLibreMap) => void
 }
 
@@ -48,9 +50,13 @@ type MoveVessel = {
   vessel: Vessel
   marker: Marker
   headingEl: HTMLElement | null
-  baseProgress: number
+  /** Fraction of the route already travelled, advanced each tick. */
+  progress: number
+  /** Speed over ground in knots, straight from AIS / the scenario fleet. */
   speed: number
   direction: 'in' | 'out'
+  /** Marker root element, used to fade hulls across a route wrap. */
+  element: HTMLElement
 }
 
 const ROUTE_SOURCE = 'cp-route'
@@ -302,6 +308,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onSelectVessel,
     onSelectChokepoint,
     reconProgress,
+    timeScale,
     onMapReady,
   },
   ref,
@@ -319,6 +326,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const arrowMarkersRef = useRef<Marker[]>([])
   const blockadeMarkerRef = useRef<Marker | null>(null)
   const gateMarkersRef = useRef<Marker[]>([])
+  const timeScaleRef = useRef(timeScale)
+  useEffect(() => {
+    timeScaleRef.current = timeScale
+  }, [timeScale])
   const gateClickRef = useRef(onSelectChokepoint)
   useEffect(() => {
     gateClickRef.current = onSelectChokepoint
@@ -427,9 +438,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           vessel,
           marker,
           headingEl,
-          baseProgress: vessel.progress,
+          progress: vessel.progress,
           speed: vessel.speed,
           direction: vessel.direction,
+          element,
         })
       }
     })
@@ -883,24 +895,51 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       })
     })
 
+    // Vessels advance from real speed over ground: knots -> km/h -> km per
+    // elapsed second, divided by the route length in km. The previous version
+    // used a hard-coded magic factor that ran hulls at ~13000x real speed.
     let lastFrame = 0
     let frame = 0
     const animate = (time: number) => {
       frame = requestAnimationFrame(animate)
       if (!map || !loadedRef.current || document.hidden) return
       if (time - lastFrame < 40) return
+
+      // Real elapsed seconds, capped so a backgrounded tab does not teleport
+      // hulls down the waterway when it resumes.
+      const deltaSeconds = Math.min((time - lastFrame) / 1000, 0.25)
       lastFrame = time
+
       const route = routeRef.current
+      const routeKm = Math.max(pathLength(route), 1)
+      const timeScale = timeScaleRef.current
+
       for (const entry of movingRef.current) {
+        // km per second at 1x real time => fraction of the route per second.
+        const kmPerSecond = (entry.speed * 1.852) / 3600
+        const progressPerSecond = (kmPerSecond / routeKm) * timeScale
         const directionFactor = entry.direction === 'in' ? 1 : -1
-        const progress =
-          (((entry.baseProgress + directionFactor * time * entry.speed * 0.000035) % 1) + 1) % 1
+
+        let progress = entry.progress + directionFactor * progressPerSecond * deltaSeconds
+        // Wrap so outbound hulls re-enter at the far end and vice versa. Use a
+        // CSS class for the fade: setting inline style.opacity here would be
+        // overwritten by MapLibre rewriting the element's style on the very
+        // same frame (marker.setLngLat below).
+        if (progress > 1 || progress < 0) {
+          entry.element.classList.add('is-wrapping')
+          window.setTimeout(() => {
+            entry.element.classList.remove('is-wrapping')
+          }, 320)
+          progress = ((progress % 1) + 1) % 1
+        }
+        entry.progress = progress
+
         const point = pointAlong(route, progress)
-        const pointAhead = pointAlong(route, clamp(progress + 0.006, 0, 1))
+        const pointAhead = pointAlong(route, clamp(progress + directionFactor * 0.004, 0, 1))
         const bearing = bearingBetween(point, pointAhead)
         entry.marker.setLngLat(point)
         if (entry.headingEl) {
-          entry.headingEl.style.transform = `rotate(${directionFactor === 1 ? bearing : bearing + 180}deg)`
+          entry.headingEl.style.transform = `rotate(${bearing}deg)`
         }
       }
 

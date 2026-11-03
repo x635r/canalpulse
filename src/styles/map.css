@@ -710,3 +710,9 @@
   font-weight: 400;
   color: var(--muted);
 }
+
+/* Hulls fade across the route wrap so they never appear to teleport. */
+.vessel-marker.is-wrapping {
+  opacity: 0 !important;
+  transition: opacity 0.12s linear;
+}

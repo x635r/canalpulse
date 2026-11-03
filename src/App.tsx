@@ -28,6 +28,8 @@ function App() {
   // Live AIS is only polled while the operator asks for it, so the default page
   // load never depends on a third-party feed being reachable.
   const [liveAisOn, setLiveAisOn] = useState(false)
+  // 1x is true real time; the higher steps are for watching flow patterns.
+  const [timeScale, setTimeScale] = useState(1)
 
   const chokepoint = chokepointById[chokepointId]
   const fleet = useMemo(() => generateFleet(chokepoint), [chokepoint])
@@ -131,6 +133,8 @@ function App() {
             selectedVessel={selectedVessel}
             onSelectVessel={selectVessel}
             onCycleVessel={cycleVessel}
+            timeScale={timeScale}
+            onTimeScale={setTimeScale}
             liveAis={liveAis}
             liveAisOn={liveAisOn}
             onToggleLiveAis={() => setLiveAisOn((value) => !value)}

@@ -1333,3 +1333,49 @@
 .live-ais-refresh:hover {
   color: var(--accent);
 }
+
+/* ---------- simulation time scale ---------- */
+
+.time-scale-control {
+  position: absolute;
+  z-index: 16;
+  right: 16px;
+  top: 208px;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(135deg, rgba(6, 20, 16, 0.94), rgba(4, 13, 10, 0.88));
+  backdrop-filter: blur(9px);
+}
+
+.time-scale-label {
+  padding: 0 6px 0 4px;
+  font-family: var(--font-mono);
+  font-size: 5.4px;
+  letter-spacing: 0.13em;
+  color: var(--muted-2);
+}
+
+.time-scale-control button {
+  padding: 3px 7px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 6.2px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+
+.time-scale-control button:hover {
+  color: var(--ink);
+  background: rgba(105, 223, 195, 0.08);
+}
+
+.time-scale-control button.is-active {
+  color: var(--accent);
+  background: rgba(105, 223, 195, 0.14);
+}
