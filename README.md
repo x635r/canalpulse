@@ -28,6 +28,23 @@ npm run preview
 
 技术栈：React 19 + TypeScript 7 + Vite 8 + MapLibre GL JS 6。生产构建会自动把 MapLibre worker 拆成独立资源；这里通过 `?worker&url` + `setWorkerUrl()` 解决 bundler 下的 MapLibre 6 worker 路径问题。
 
+### 部署（Cloudflare Pages）
+
+线上地址：<https://canalpulse.pages.dev>
+
+```bash
+npm run build      # tsc -b && vite build
+npm run deploy     # wrangler pages deploy dist --project-name=canalpulse
+```
+
+配置见 `wrangler.jsonc`（`pages_build_output_dir: dist`）。`public/_headers` 为哈希资源设置一年不可变缓存，HTML 外壳保持不缓存，避免发版后卡在旧版本。
+
+若需预览环境：
+
+```bash
+npm run deploy:preview   # 部署到 preview 分支
+```
+
 ## 核心交互
 
 - **四节点切换**：苏伊士、巴拿马、马六甲、博斯普鲁斯，地图会自动拟合真实水道、航路与锚地包络。
