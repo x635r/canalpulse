@@ -1,0 +1,204 @@
+import { useEffect, useMemo, useState } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
+import { Header } from './components/Header'
+import { ChokepointRail } from './components/ChokepointRail'
+import { ChartStage } from './components/ChartStage'
+import { ConvoyDock } from './components/ConvoyDock'
+import { BlockadeReplay } from './components/BlockadeReplay'
+import { QueuePanel, ChartProbe, ArchivePanel } from './components/RightRail'
+import { FooterTicker } from './components/FooterTicker'
+import { SourcesDrawer } from './components/SourcesDrawer'
+import { chokepointById, defaultChokepoint, modeMeta, networkPressure } from './data/chokepoints'
+import { generateFleet, getLeadVessel } from './data/fleet'
+import { useWeather } from './lib/useWeather'
+import { useLiveAis } from './lib/useLiveAis'
+import type { ChokepointId, MapMode } from './types'
+
+function App() {
+  const [chokepointId, setChokepointId] = useState<ChokepointId>(defaultChokepoint.id)
+  const [mode, setMode] = useState<MapMode>('flow')
+  const [sourcesOpen, setSourcesOpen] = useState(false)
+  const [reconProgress, setReconProgress] = useState(0.36)
+  const [reconPlaying, setReconPlaying] = useState(false)
+  const [selectionByChokepoint, setSelectionByChokepoint] = useState<Partial<Record<ChokepointId, string>>>({})
+  const [draftOverride, setDraftOverride] = useState<{ id: string; value: number } | null>(null)
+  // The chart is the primary surface, so the sandbox dock starts collapsed and
+  // only claims height when the operator opens it.
+  const [dockOpen, setDockOpen] = useState(false)
+  // Live AIS is only polled while the operator asks for it, so the default page
+  // load never depends on a third-party feed being reachable.
+  const [liveAisOn, setLiveAisOn] = useState(false)
+
+  const chokepoint = chokepointById[chokepointId]
+  const fleet = useMemo(() => generateFleet(chokepoint), [chokepoint])
+  const selectedVessel =
+    fleet.find((vessel) => vessel.id === selectionByChokepoint[chokepoint.id]) ?? getLeadVessel(fleet)
+  const probeDraft =
+    draftOverride?.id === selectedVessel.id ? draftOverride.value : selectedVessel.draft
+  const weather = useWeather(chokepoint)
+  const liveAis = useLiveAis(liveAisOn)
+
+  const selectVessel = (id: string) => {
+    const vessel = fleet.find((entry) => entry.id === id)
+    if (!vessel) return
+    setSelectionByChokepoint((current) => ({ ...current, [chokepoint.id]: vessel.id }))
+    setDraftOverride(null)
+  }
+
+  const cycleVessel = (direction: -1 | 1) => {
+    const anchored = fleet.filter((vessel) => vessel.status === 'anchored')
+    if (anchored.length === 0) return
+    const index = anchored.findIndex((vessel) => vessel.id === selectedVessel.id)
+    const next = anchored[(index + direction + anchored.length) % anchored.length]
+    setSelectionByChokepoint((current) => ({ ...current, [chokepoint.id]: next.id }))
+    setDraftOverride(null)
+  }
+
+  const selectChokepoint = (id: ChokepointId) => {
+    setChokepointId(id)
+    // Picking a gate from the global chart drills into that gate's own view.
+    if (mode === 'recon' || mode === 'world') {
+      setMode('flow')
+      setReconPlaying(false)
+    }
+  }
+
+  const changeMode = (nextMode: MapMode) => {
+    if (nextMode === 'recon') {
+      setChokepointId('suez')
+      setReconPlaying(false)
+    } else {
+      setReconPlaying(false)
+    }
+    setMode(nextMode)
+  }
+
+  const openRecon = () => {
+    setChokepointId('suez')
+    setMode('recon')
+    setReconProgress(0)
+    setReconPlaying(true)
+  }
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      const target = event.target as HTMLElement | null
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
+
+      const modeEntry = modeMeta.find((entry) => entry.shortcut === event.key)
+      if (!modeEntry) return
+      event.preventDefault()
+      if (modeEntry.id === 'recon') setChokepointId('suez')
+      setReconPlaying(false)
+      setMode(modeEntry.id)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  // The sandbox dock belongs to a single waterway, so the global chart hides it.
+  const showDock = mode !== 'world'
+
+  return (
+    <div className={`app ${mode === 'recon' ? 'app--recon' : ''}`}>
+      <div className="ambient-layer" aria-hidden="true">
+        <div className="ambient-orb ambient-orb--one" />
+        <div className="ambient-orb ambient-orb--two" />
+        <div className="ambient-scan" />
+      </div>
+
+      <Header
+        weather={weather}
+        pressure={networkPressure}
+        onOpenSources={() => setSourcesOpen(true)}
+      />
+
+      <main className="workspace">
+        <ChokepointRail
+          activeId={chokepoint.id}
+          onSelect={(entry) => selectChokepoint(entry.id)}
+          onOpenSources={() => setSourcesOpen(true)}
+        />
+
+        <div className={`center-stack ${dockOpen ? 'is-dock-open' : ''}`}>
+          <ChartStage
+            chokepoint={chokepoint}
+            mode={mode}
+            onModeChange={changeMode}
+            onSelectChokepoint={selectChokepoint}
+            vessels={fleet}
+            selectedVessel={selectedVessel}
+            onSelectVessel={selectVessel}
+            onCycleVessel={cycleVessel}
+            liveAis={liveAis}
+            liveAisOn={liveAisOn}
+            onToggleLiveAis={() => setLiveAisOn((value) => !value)}
+            weather={weather}
+            reconProgress={reconProgress}
+            onOpenSources={() => setSourcesOpen(true)}
+          />
+
+          {!showDock ? null : dockOpen ? (
+            <>
+              {mode === 'recon' ? (
+                <BlockadeReplay
+                  progress={reconProgress}
+                  onProgress={setReconProgress}
+                  playing={reconPlaying}
+                  onPlaying={setReconPlaying}
+                  onExit={() => changeMode('flow')}
+                />
+              ) : (
+                <ConvoyDock key={chokepoint.id} chokepoint={chokepoint} />
+              )}
+              <button
+                type="button"
+                className="dock-collapse"
+                onClick={() => setDockOpen(false)}
+                aria-label="收起编队沙盒"
+              >
+                <ChevronDown size={13} />
+                COLLAPSE
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="dock-expand"
+              onClick={() => setDockOpen(true)}
+              aria-label="展开编队沙盒"
+            >
+              <ChevronUp size={13} />
+              {mode === 'recon' ? 'BLOCKADE REPLAY' : 'CONVOY SANDBOX'}
+            </button>
+          )}
+        </div>
+
+        <aside className="right-rail">
+          <QueuePanel chokepoint={chokepoint} />
+          <ChartProbe
+            chokepoint={chokepoint}
+            selectedVessel={selectedVessel}
+            onCycleVessel={cycleVessel}
+            draft={probeDraft}
+            onDraft={(value) =>
+              setDraftOverride({ id: selectedVessel.id, value })
+            }
+          />
+          <ArchivePanel
+            mode={mode}
+            progress={reconProgress}
+            onReplay={openRecon}
+            onModeChange={changeMode}
+          />
+        </aside>
+      </main>
+
+      <FooterTicker />
+      <SourcesDrawer open={sourcesOpen} onClose={() => setSourcesOpen(false)} />
+    </div>
+  )
+}
+
+export default App

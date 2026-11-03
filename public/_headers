@@ -1,0 +1,9 @@
+# Long-cache the hashed build assets; never cache the HTML shell.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/
+  Cache-Control: public, max-age=0, must-revalidate
