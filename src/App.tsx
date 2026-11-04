@@ -8,10 +8,13 @@ import { BlockadeReplay } from './components/BlockadeReplay'
 import { QueuePanel, ChartProbe, ArchivePanel } from './components/RightRail'
 import { FooterTicker } from './components/FooterTicker'
 import { SourcesDrawer } from './components/SourcesDrawer'
+import { RailToggle } from './components/RailToggle'
 import { chokepointById, defaultChokepoint, modeMeta, networkPressure } from './data/chokepoints'
 import { generateFleet, getLeadVessel } from './data/fleet'
 import { useWeather } from './lib/useWeather'
 import { useLiveAis } from './lib/useLiveAis'
+import { useOceanObservations } from './lib/useOceanObservations'
+import type { OceanLayerId } from './data/oceanLayers'
 import type { ChokepointId, MapMode } from './types'
 
 function App() {
@@ -30,6 +33,11 @@ function App() {
   const [liveAisOn, setLiveAisOn] = useState(false)
   // 1x is true real time; the higher steps are for watching flow patterns.
   const [timeScale, setTimeScale] = useState(1)
+  // Ocean data layers are opt-in: the base chart should stay light on first load.
+  const [oceanLayers, setOceanLayers] = useState<OceanLayerId[]>(['buoys'])
+  // Rails float over the chart, so they can be dismissed for a clean full-map view.
+  const [leftRailOpen, setLeftRailOpen] = useState(true)
+  const [rightRailOpen, setRightRailOpen] = useState(true)
 
   const chokepoint = chokepointById[chokepointId]
   const fleet = useMemo(() => generateFleet(chokepoint), [chokepoint])
@@ -39,6 +47,17 @@ function App() {
     draftOverride?.id === selectedVessel.id ? draftOverride.value : selectedVessel.draft
   const weather = useWeather(chokepoint)
   const liveAis = useLiveAis(liveAisOn)
+  const oceanObservations = useOceanObservations(true)
+
+  const toggleOceanLayer = (id: OceanLayerId) => {
+    setOceanLayers((current) =>
+      current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id],
+    )
+  }
+
+  // Respect the operator's explicit choices. Filtering by mode here silently
+  // dropped layers the user had just switched on when they changed view.
+  const modeOceanLayers = oceanLayers
 
   const selectVessel = (id: string) => {
     const vessel = fleet.find((entry) => entry.id === id)
@@ -116,7 +135,24 @@ function App() {
         onOpenSources={() => setSourcesOpen(true)}
       />
 
-      <main className="workspace">
+      <main
+        className={`workspace ${leftRailOpen ? '' : 'rail-left-hidden'} ${
+          rightRailOpen ? '' : 'rail-right-hidden'
+        }`}
+      >
+        <RailToggle
+          side="left"
+          open={leftRailOpen}
+          onToggle={() => setLeftRailOpen((value) => !value)}
+          label="咽喉列表"
+        />
+        <RailToggle
+          side="right"
+          open={rightRailOpen}
+          onToggle={() => setRightRailOpen((value) => !value)}
+          label="数据面板"
+        />
+
         <ChokepointRail
           activeId={chokepoint.id}
           onSelect={(entry) => selectChokepoint(entry.id)}
@@ -135,6 +171,9 @@ function App() {
             onCycleVessel={cycleVessel}
             timeScale={timeScale}
             onTimeScale={setTimeScale}
+            activeOceanLayers={modeOceanLayers}
+            onToggleOceanLayer={toggleOceanLayer}
+            oceanObservations={oceanObservations}
             liveAis={liveAis}
             liveAisOn={liveAisOn}
             onToggleLiveAis={() => setLiveAisOn((value) => !value)}

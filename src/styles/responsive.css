@@ -173,12 +173,27 @@
   }
 
   .workspace {
-    grid-template-columns: minmax(0, 1fr);
+    display: block;
     height: auto;
+    margin: 0;
     border-left: 0;
     border-right: 0;
-    margin: 0;
     background: transparent;
+    overflow: visible;
+  }
+
+  /* On small screens the rails are stacked content, not floating overlays. */
+  .left-rail,
+  .right-rail {
+    position: static;
+    width: auto;
+    transform: none !important;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+
+  .rail-toggle {
+    display: none;
   }
 
   .left-rail {

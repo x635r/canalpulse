@@ -18,9 +18,12 @@ import { getReconState } from '../lib/blockade'
 import { formatCoordinate, formatMoney } from '../lib/geo'
 import { MapCanvas, type MapCanvasHandle } from './MapCanvas'
 import { VesselDetail } from './VesselDetail'
+import { OceanPanel } from './OceanPanel'
 import { ChartGraticule } from './ChartGraticule'
 import { useChartProbe } from '../lib/useChartProbe'
 import type { LiveAisState } from '../lib/useLiveAis'
+import type { OceanObservationState } from '../lib/useOceanObservations'
+import type { OceanLayerId } from '../data/oceanLayers'
 import { ToneDot, WeatherArrow } from './Primitives'
 
 const modeIcons = {
@@ -147,6 +150,9 @@ export function ChartStage({
   onCycleVessel,
   timeScale,
   onTimeScale,
+  activeOceanLayers,
+  onToggleOceanLayer,
+  oceanObservations,
   liveAis,
   liveAisOn,
   onToggleLiveAis,
@@ -164,6 +170,9 @@ export function ChartStage({
   onCycleVessel: (direction: -1 | 1) => void
   timeScale: number
   onTimeScale: (value: number) => void
+  activeOceanLayers: OceanLayerId[]
+  onToggleOceanLayer: (id: OceanLayerId) => void
+  oceanObservations: OceanObservationState
   liveAis: LiveAisState
   liveAisOn: boolean
   onToggleLiveAis: () => void
@@ -255,6 +264,9 @@ export function ChartStage({
           onSelectChokepoint={onSelectChokepoint}
           reconProgress={reconProgress}
           timeScale={timeScale}
+          activeOceanLayers={activeOceanLayers}
+          buoys={oceanObservations.buoys}
+          quakes={oceanObservations.quakes}
           onMapReady={setMapInstance}
         />
 
@@ -328,6 +340,12 @@ export function ChartStage({
             ))}
           </div>
         )}
+
+        <OceanPanel
+          active={activeOceanLayers}
+          onToggle={onToggleOceanLayer}
+          observations={oceanObservations}
+        />
 
         <div className={`live-ais-pill ${liveAisOn ? 'is-on' : ''}`}>
           <button type="button" className="live-ais-toggle" onClick={onToggleLiveAis}>

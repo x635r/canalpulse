@@ -19,6 +19,8 @@ import type { Chokepoint, ChokepointId, MapMode, Vessel } from '../types'
 import { everGiven } from '../data/blockade'
 import { vesselTypes } from '../data/fleet'
 import { chokepoints } from '../data/chokepoints'
+import { oceanLayers, type OceanLayerId } from '../data/oceanLayers'
+import type { BuoyObservation, SeismicEvent } from '../data/oceanObservations'
 import { bearingBetween, circlePolygon, clamp, pathLength, pointAlong } from '../lib/geo'
 import { getReconState } from '../lib/blockade'
 import { chartStyle } from '../lib/mapStyle'
@@ -41,6 +43,11 @@ interface MapCanvasProps {
   onSelectVessel: (id: string) => void
   onSelectChokepoint?: (id: ChokepointId) => void
   reconProgress: number
+  /** Active ocean data layers (rasters + observation points). */
+  activeOceanLayers: OceanLayerId[]
+  /** Live buoy + seismic observations. */
+  buoys: BuoyObservation[]
+  quakes: SeismicEvent[]
   /** Playback multiplier over real time. 1 = true real-time. */
   timeScale: number
   onMapReady?: (map: MapLibreMap) => void
@@ -71,6 +78,12 @@ const BATHY_SOURCE = 'emodnet-bathy'
 const BATHY_GLOBAL_SOURCE = 'gebco-bathy'
 const SEAMARK_SOURCE = 'openseamap-seamark'
 const SEAMARK_LAYER = 'seamark-overlay'
+const BUOY_SOURCE = 'cp-buoys'
+const BUOY_LAYER = 'buoy-stations'
+const QUAKE_SOURCE = 'cp-quakes'
+const QUAKE_LAYER = 'seismic-events'
+/** Raster layer id per ocean WMS layer. */
+const oceanLayerRasterId = (id: OceanLayerId) => `ocean-raster-${id}`
 
 function featureCollection(features: Feature[]): FeatureCollection {
   return { type: 'FeatureCollection', features }
@@ -106,6 +119,60 @@ function heatFeatures(vessels: Vessel[], chokepoint: Chokepoint): FeatureCollect
 
   void chokepoint
   return featureCollection(points)
+}
+
+/** Build a GIBS WMS tile template; MapLibre substitutes {bbox-epsg-3857}. */
+function oceanTileUrl(layerId: OceanLayerId): string | null {
+  const def = oceanLayers.find((entry) => entry.id === layerId)
+  if (!def?.wms || !def.wmsLayer) return null
+  const date = new Date(Date.now() - (def.timeOffsetDays ?? 3) * 86_400_000)
+  const stamp = date.toISOString().slice(0, 10)
+  const params = new URLSearchParams({
+    SERVICE: 'WMS',
+    REQUEST: 'GetMap',
+    VERSION: '1.3.0',
+    LAYERS: def.wmsLayer,
+    FORMAT: 'image/png',
+    TRANSPARENT: 'TRUE',
+    WIDTH: '256',
+    HEIGHT: '256',
+    CRS: 'EPSG:3857',
+    BBOX: '{bbox-epsg-3857}',
+    TIME: stamp,
+  })
+  return `${def.wms}?${params.toString()}`
+}
+
+function buoyFeatures(buoys: BuoyObservation[]): FeatureCollection {
+  return featureCollection(
+    buoys.map((buoy) => ({
+      type: 'Feature' as const,
+      properties: {
+        station: buoy.station,
+        waveHeight: buoy.waveHeight ?? -1,
+        windSpeed: buoy.windSpeed ?? -1,
+        waterTemp: buoy.waterTemp ?? -999,
+        pressure: buoy.pressure ?? -1,
+        observedAt: buoy.observedAt,
+      },
+      geometry: { type: 'Point' as const, coordinates: [buoy.lon, buoy.lat] },
+    })),
+  )
+}
+
+function quakeFeatures(quakes: SeismicEvent[]): FeatureCollection {
+  return featureCollection(
+    quakes.map((quake) => ({
+      type: 'Feature' as const,
+      properties: {
+        magnitude: quake.magnitude,
+        place: quake.place,
+        depthKm: quake.depthKm,
+        time: quake.time,
+      },
+      geometry: { type: 'Point' as const, coordinates: [quake.lon, quake.lat] },
+    })),
+  )
 }
 
 function liveAisFeatures(vessels: Vessel[]): FeatureCollection {
@@ -308,6 +375,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     onSelectVessel,
     onSelectChokepoint,
     reconProgress,
+    activeOceanLayers,
+    buoys,
+    quakes,
     timeScale,
     onMapReady,
   },
@@ -326,6 +396,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
   const arrowMarkersRef = useRef<Marker[]>([])
   const blockadeMarkerRef = useRef<Marker | null>(null)
   const gateMarkersRef = useRef<Marker[]>([])
+  const oceanLayersRef = useRef(activeOceanLayers)
+  useEffect(() => {
+    oceanLayersRef.current = activeOceanLayers
+  }, [activeOceanLayers])
   const timeScaleRef = useRef(timeScale)
   useEffect(() => {
     timeScaleRef.current = timeScale
@@ -630,6 +704,89 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           'raster-contrast': 0.12,
           'raster-brightness-max': 0.86,
           'raster-resampling': 'linear',
+        },
+      })
+
+      // Ocean data rasters (NASA GIBS WMS). Each layer is added hidden and
+      // toggled by the ocean layer panel; opacity stays low so the chart
+      // underneath remains readable.
+      for (const layerDef of oceanLayers) {
+        const tiles = oceanTileUrl(layerDef.id)
+        if (!tiles) continue
+        const sourceId = `ocean-src-${layerDef.id}`
+        map.addSource(sourceId, {
+          type: 'raster',
+          tiles: [tiles],
+          tileSize: 256,
+          // GIBS serves global imagery; cap the zoom so MapLibre keeps using
+          // overview tiles instead of requesting detail it does not have (which
+          // showed up as hard tile-edge seams at high zoom).
+          maxzoom: 6,
+          attribution: layerDef.attribution,
+        })
+        map.addLayer({
+          id: oceanLayerRasterId(layerDef.id),
+          type: 'raster',
+          source: sourceId,
+          layout: { visibility: 'none' },
+          paint: {
+            'raster-opacity': 0.55,
+            'raster-resampling': 'linear',
+            'raster-fade-duration': 300,
+          },
+        })
+      }
+
+      // Live ocean observations: NDBC buoys + USGS seismicity.
+      map.addSource(BUOY_SOURCE, { type: 'geojson', data: featureCollection([]) })
+      map.addLayer({
+        id: BUOY_LAYER,
+        type: 'circle',
+        source: BUOY_SOURCE,
+        layout: { visibility: 'none' },
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 2, 2.2, 6, 3.6, 10, 5.5],
+          'circle-color': [
+            'interpolate',
+            ['linear'],
+            ['coalesce', ['get', 'waveHeight'], 0],
+            0,
+            '#3d6f8f',
+            2,
+            '#4fa3b8',
+            4,
+            '#7fd6c9',
+            8,
+            '#f2d06b',
+          ],
+          'circle-opacity': 0.9,
+          'circle-stroke-color': 'rgba(4, 14, 11, 0.85)',
+          'circle-stroke-width': 0.7,
+        },
+      })
+
+      map.addSource(QUAKE_SOURCE, { type: 'geojson', data: featureCollection([]) })
+      map.addLayer({
+        id: QUAKE_LAYER,
+        type: 'circle',
+        source: QUAKE_SOURCE,
+        layout: { visibility: 'none' },
+        paint: {
+          'circle-radius': [
+            'interpolate',
+            ['linear'],
+            ['get', 'magnitude'],
+            4.5,
+            4,
+            6,
+            9,
+            8,
+            18,
+          ],
+          'circle-color': 'rgba(255, 111, 77, 0.22)',
+          'circle-stroke-color': '#ff8a6a',
+          'circle-stroke-width': 1,
+          'circle-opacity': 0.85,
         },
       })
 
@@ -1082,6 +1239,38 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (!map || !loadedRef.current) return
     syncSources(chokepoint)
   }, [mode, reconProgress, chokepoint, syncSources])
+
+  // Toggle ocean data rasters / observation layers on demand.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !loadedRef.current) return
+
+    const active = new Set(activeOceanLayers)
+    for (const layerDef of oceanLayers) {
+      const rasterId = oceanLayerRasterId(layerDef.id)
+      if (!map.getLayer(rasterId)) continue
+      map.setLayoutProperty(rasterId, 'visibility', active.has(layerDef.id) ? 'visible' : 'none')
+    }
+    if (map.getLayer(BUOY_LAYER)) {
+      map.setLayoutProperty(BUOY_LAYER, 'visibility', active.has('buoys') ? 'visible' : 'none')
+    }
+    if (map.getLayer(QUAKE_LAYER)) {
+      map.setLayoutProperty(QUAKE_LAYER, 'visibility', active.has('quakes') ? 'visible' : 'none')
+    }
+  }, [activeOceanLayers])
+
+  // Push live buoy / seismic observations into their GeoJSON sources.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !loadedRef.current) return
+    ;(map.getSource(BUOY_SOURCE) as GeoJSONSource | undefined)?.setData(buoyFeatures(buoys))
+  }, [buoys])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !loadedRef.current) return
+    ;(map.getSource(QUAKE_SOURCE) as GeoJSONSource | undefined)?.setData(quakeFeatures(quakes))
+  }, [quakes])
 
   // World view draws one compact gate marker per chokepoint so the global chart
   // shows where the monitored waterways are, with their live pressure reading.

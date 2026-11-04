@@ -356,7 +356,7 @@
 .vessel-detail {
   position: absolute;
   z-index: 16;
-  left: 16px;
+  left: var(--overlay-left, 16px);
   top: 104px;
   width: 268px;
   border: 1px solid rgba(105, 223, 195, 0.22);
