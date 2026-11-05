@@ -1,6 +1,7 @@
 import { ArrowUpRight, ChevronRight, RadioTower } from 'lucide-react'
 import type { Chokepoint, ChokepointId } from '../types'
 import { chokepoints, networkPressure, networkTotals } from '../data/chokepoints'
+import type { TransitMap } from '../data/portwatch'
 import { ChokeGlyph, Sparkline, ToneDot } from './Primitives'
 
 function pressureBand(pressure: number) {
@@ -86,10 +87,12 @@ export function ChokepointRail({
   activeId,
   onSelect,
   onOpenSources,
+  transits,
 }: {
   activeId: ChokepointId
   onSelect: (chokepoint: Chokepoint) => void
   onOpenSources: () => void
+  transits: TransitMap
 }) {
   const totalActive = networkTotals.active
   const totalQueue = networkTotals.queue
@@ -137,17 +140,34 @@ export function ChokepointRail({
                   {chokepoint.nameZh} <i>·</i> {chokepoint.region}
                 </span>
                 <span className="choke-card__metrics">
-                  <span>
-                    <em>QUEUE</em>
-                    <strong>{chokepoint.summary.queue}</strong>
-                  </span>
-                  <span>
-                    <em>WAIT</em>
-                    <strong>
-                      {chokepoint.summary.avgWaitHours.toFixed(1)}
-                      <small>H</small>
-                    </strong>
-                  </span>
+                  {transits[chokepoint.id] ? (
+                    <>
+                      <span>
+                        <em>TRANSITS</em>
+                        <strong>{transits[chokepoint.id]!.total.toLocaleString('en-US')}</strong>
+                      </span>
+                      <span>
+                        <em>PER DAY</em>
+                        <strong>
+                          {(transits[chokepoint.id]!.total / 365).toFixed(1)}
+                        </strong>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span>
+                        <em>QUEUE</em>
+                        <strong>{chokepoint.summary.queue}</strong>
+                      </span>
+                      <span>
+                        <em>WAIT</em>
+                        <strong>
+                          {chokepoint.summary.avgWaitHours.toFixed(1)}
+                          <small>H</small>
+                        </strong>
+                      </span>
+                    </>
+                  )}
                   <Sparkline
                     data={chokepoint.spark}
                     color={

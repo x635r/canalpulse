@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "deploy": "wrangler pages deploy dist --project-name=canalpulse",
-    "deploy:preview": "wrangler pages deploy dist --project-name=canalpulse --branch=preview"
+    "deploy:preview": "wrangler pages deploy dist --project-name=canalpulse --branch=preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "lucide-react": "^1.66.0",
@@ -28,6 +30,7 @@
     "oxlint": "^1.89.0",
     "typescript": "~7.0.2",
     "vite": "^8.3.5",
+    "vitest": "^3.2.7",
     "wrangler": "^4.157.0"
   },
   "description": "Global chokepoint and canal operations dashboard",

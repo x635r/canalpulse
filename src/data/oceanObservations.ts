@@ -57,7 +57,7 @@ export function parseNdbc(text: string): BuoyObservation[] {
     if (!line.trim() || line.startsWith('#')) continue
     // Columns: STN LAT LON YYYY MM DD hh mm WDIR WSPD GST WVHT DPD APD MWD PRES ...
     const f = line.trim().split(/\s+/)
-    if (f.length < 18) continue
+    if (f.length < 19) continue
     const lat = Number(f[1])
     const lon = Number(f[2])
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue
@@ -74,8 +74,8 @@ export function parseNdbc(text: string): BuoyObservation[] {
       windSpeed: num(f[9]),
       waveHeight: num(f[11]),
       wavePeriod: num(f[12]),
-      airTemp: num(f[16]),
-      waterTemp: num(f[17]),
+      airTemp: num(f[17]),
+      waterTemp: num(f[18]),
       pressure: num(f[15]),
       observedAt,
     })

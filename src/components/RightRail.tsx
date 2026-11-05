@@ -10,6 +10,7 @@ import type { Chokepoint, MapMode, Vessel, VesselTypeId } from '../types'
 import { everGiven, blockadeArchive } from '../data/blockade'
 import { heatmapTotal, vesselTypes } from '../data/fleet'
 import { formatMoney } from '../lib/geo'
+import { deriveSummaryMetrics, type ChokepointTransits } from '../data/portwatch'
 
 const typeOrder: VesselTypeId[] = ['container', 'bulk', 'lng', 'vlcc']
 const bucketLabels = ['0–6H', '6–12H', '12–24H', '24H+']
@@ -28,34 +29,100 @@ function cellTextColor(count: number) {
   return '#9ccec0'
 }
 
-export function QueuePanel({ chokepoint }: { chokepoint: Chokepoint }) {
+export function QueuePanel({
+  chokepoint,
+  transits,
+  portWatchLive,
+}: {
+  chokepoint: Chokepoint
+  transits?: ChokepointTransits
+  portWatchLive: boolean
+}) {
   const maxCell = Math.max(...typeOrder.flatMap((type) => chokepoint.queueMatrix[type]))
   const total = heatmapTotal(chokepoint)
   const anchorages = [...chokepoint.anchorages].sort((a, b) => b.utilization - a.utilization)
+
+  // Real transit counts from IMF PortWatch, when available.
+  const derived = transits ? deriveSummaryMetrics(transits, chokepoint.summary.transitHours) : null
 
   return (
     <section className="rail-panel queue-panel">
       <div className="rail-panel-head">
         <div>
           <span className="eyebrow">ANCHORAGE PRESSURE / 锚地压港</span>
-          <h3>WAIT MATRIX</h3>
+          <h3>{derived ? 'TRANSIT THROUGHPUT' : 'WAIT MATRIX'}</h3>
         </div>
-        <span className="panel-code">QP-{chokepoint.index}</span>
+        <span className={`panel-code ${portWatchLive ? 'is-live' : ''}`}>
+          {portWatchLive ? 'PORTWATCH' : `QP-${chokepoint.index}`}
+        </span>
       </div>
-      <div className="queue-headline">
-        <div>
-          <strong>{total}</strong>
-          <span>HELD AT ANCHOR</span>
+
+      {derived && transits ? (
+        <>
+          <div className="queue-headline">
+            <div className="is-source">
+              <strong>{transits.total.toLocaleString('en-US')}</strong>
+              <span>ANNUAL TRANSITS</span>
+            </div>
+            <div className="is-source">
+              <strong>{derived.dailyTransits}<small>/D</small></strong>
+              <span>DAILY AVG</span>
+            </div>
+            <div>
+              <strong>{derived.inWaterway}</strong>
+              <span>IN WATERWAY · EST</span>
+            </div>
+          </div>
+
+          <div className="transit-mix">
+            <div className="transit-mix__head">
+              <span>VESSEL MIX · 船型构成</span>
+              <em>IMF PORTWATCH</em>
+            </div>
+            {[
+              { key: 'container', label: 'Container', value: transits.container },
+              { key: 'bulk', label: 'Dry bulk', value: transits.bulk },
+              { key: 'vlcc', label: 'Tanker', value: transits.tanker },
+              { key: 'lng', label: 'Gen cargo / RoRo', value: transits.generalCargo + transits.roro },
+            ].map((row) => {
+              const share = transits.total > 0 ? (row.value / transits.total) * 100 : 0
+              return (
+                <div className="transit-mix__row" key={row.key}>
+                  <span className={`transit-mix__dot transit-mix__dot--${row.key}`} />
+                  <span className="transit-mix__label">{row.label}</span>
+                  <span className="transit-mix__bar">
+                    <i style={{ width: `${share.toFixed(1)}%` }} />
+                  </span>
+                  <b>{row.value.toLocaleString('en-US')}</b>
+                  <em>{share.toFixed(0)}%</em>
+                </div>
+              )
+            })}
+          </div>
+
+          {transits.topIndustry && (
+            <div className="transit-industry">
+              <span>TOP TRADE</span>
+              <strong>{transits.topIndustry}</strong>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="queue-headline">
+          <div>
+            <strong>{total}</strong>
+            <span>HELD AT ANCHOR</span>
+          </div>
+          <div>
+            <strong>{chokepoint.summary.avgWaitHours.toFixed(1)}<small>H</small></strong>
+            <span>MEAN DWELL</span>
+          </div>
+          <div>
+            <strong>{chokepoint.summary.maxWaitHours.toFixed(1)}<small>H</small></strong>
+            <span>LONGEST</span>
+          </div>
         </div>
-        <div>
-          <strong>{chokepoint.summary.avgWaitHours.toFixed(1)}<small>H</small></strong>
-          <span>MEAN DWELL</span>
-        </div>
-        <div>
-          <strong>{chokepoint.summary.maxWaitHours.toFixed(1)}<small>H</small></strong>
-          <span>LONGEST</span>
-        </div>
-      </div>
+      )}
 
       <div className="heat-matrix">
         <div className="heat-matrix__grid">

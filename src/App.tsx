@@ -9,17 +9,28 @@ import { QueuePanel, ChartProbe, ArchivePanel } from './components/RightRail'
 import { FooterTicker } from './components/FooterTicker'
 import { SourcesDrawer } from './components/SourcesDrawer'
 import { RailToggle } from './components/RailToggle'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { chokepointById, defaultChokepoint, modeMeta, networkPressure } from './data/chokepoints'
 import { generateFleet, getLeadVessel } from './data/fleet'
 import { useWeather } from './lib/useWeather'
 import { useLiveAis } from './lib/useLiveAis'
 import { useOceanObservations } from './lib/useOceanObservations'
+import { usePortWatch } from './lib/usePortWatch'
+import { useUrlState } from './lib/useUrlState'
 import type { OceanLayerId } from './data/oceanLayers'
 import type { ChokepointId, MapMode } from './types'
 
 function App() {
-  const [chokepointId, setChokepointId] = useState<ChokepointId>(defaultChokepoint.id)
-  const [mode, setMode] = useState<MapMode>('flow')
+  const { initial: urlState, sync: syncUrl } = useUrlState()
+
+  const [chokepointId, setChokepointId] = useState<ChokepointId>(() => {
+    const fromUrl = urlState.gate
+    return fromUrl && fromUrl in chokepointById ? (fromUrl as ChokepointId) : defaultChokepoint.id
+  })
+  const [mode, setMode] = useState<MapMode>(() => {
+    const allowed: MapMode[] = ['flow', 'bathymetry', 'anchorages', 'recon', 'world']
+    return allowed.includes(urlState.mode as MapMode) ? (urlState.mode as MapMode) : 'flow'
+  })
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [reconProgress, setReconProgress] = useState(0.36)
   const [reconPlaying, setReconPlaying] = useState(false)
@@ -34,7 +45,9 @@ function App() {
   // 1x is true real time; the higher steps are for watching flow patterns.
   const [timeScale, setTimeScale] = useState(1)
   // Ocean data layers are opt-in: the base chart should stay light on first load.
-  const [oceanLayers, setOceanLayers] = useState<OceanLayerId[]>(['buoys'])
+  const [oceanLayers, setOceanLayers] = useState<OceanLayerId[]>(() =>
+    urlState.layers.length > 0 ? (urlState.layers as OceanLayerId[]) : ['buoys'],
+  )
   // Rails float over the chart, so they can be dismissed for a clean full-map view.
   const [leftRailOpen, setLeftRailOpen] = useState(true)
   const [rightRailOpen, setRightRailOpen] = useState(true)
@@ -48,6 +61,7 @@ function App() {
   const weather = useWeather(chokepoint)
   const liveAis = useLiveAis(liveAisOn)
   const oceanObservations = useOceanObservations(true)
+  const portWatch = usePortWatch()
 
   const toggleOceanLayer = (id: OceanLayerId) => {
     setOceanLayers((current) =>
@@ -118,6 +132,11 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  // Mirror shareable state into the URL so a view can be bookmarked.
+  useEffect(() => {
+    syncUrl({ gate: chokepointId, mode, layers: oceanLayers })
+  }, [chokepointId, mode, oceanLayers, syncUrl])
+
   // The sandbox dock belongs to a single waterway, so the global chart hides it.
   const showDock = mode !== 'world'
 
@@ -157,9 +176,11 @@ function App() {
           activeId={chokepoint.id}
           onSelect={(entry) => selectChokepoint(entry.id)}
           onOpenSources={() => setSourcesOpen(true)}
+          transits={portWatch.transits}
         />
 
         <div className={`center-stack ${dockOpen ? 'is-dock-open' : ''}`}>
+          <ErrorBoundary surface="主海图">
           <ChartStage
             chokepoint={chokepoint}
             mode={mode}
@@ -181,6 +202,7 @@ function App() {
             reconProgress={reconProgress}
             onOpenSources={() => setSourcesOpen(true)}
           />
+          </ErrorBoundary>
 
           {!showDock ? null : dockOpen ? (
             <>
@@ -219,7 +241,12 @@ function App() {
         </div>
 
         <aside className="right-rail">
-          <QueuePanel chokepoint={chokepoint} />
+          <ErrorBoundary surface="数据面板">
+          <QueuePanel
+            chokepoint={chokepoint}
+            transits={portWatch.transits[chokepoint.id]}
+            portWatchLive={portWatch.status === 'live'}
+          />
           <ChartProbe
             chokepoint={chokepoint}
             selectedVessel={selectedVessel}
@@ -235,6 +262,7 @@ function App() {
             onReplay={openRecon}
             onModeChange={changeMode}
           />
+          </ErrorBoundary>
         </aside>
       </main>
 

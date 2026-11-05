@@ -16,7 +16,13 @@ import { chokepoints, modeMeta } from '../data/chokepoints'
 import { everGiven } from '../data/blockade'
 import { getReconState } from '../lib/blockade'
 import { formatCoordinate, formatMoney } from '../lib/geo'
-import { MapCanvas, type MapCanvasHandle } from './MapCanvas'
+import { lazy, Suspense } from 'react'
+import type { MapCanvasHandle } from './MapCanvas'
+
+// MapLibre is the single largest dependency; defer it so the shell paints first.
+const MapCanvas = lazy(() =>
+  import('./MapCanvas').then((mod) => ({ default: mod.MapCanvas })),
+)
 import { VesselDetail } from './VesselDetail'
 import { OceanPanel } from './OceanPanel'
 import { ChartGraticule } from './ChartGraticule'
@@ -253,6 +259,15 @@ export function ChartStage({
       </div>
 
       <div className={`map-frame map-frame--${mode}`}>
+        <Suspense
+          fallback={
+            <div className="chart-loader" aria-hidden="true">
+              <span className="chart-loader__ring" />
+              <span className="chart-loader__label">LOADING CHART ENGINE</span>
+              <em>海图引擎载入中</em>
+            </div>
+          }
+        >
         <MapCanvas
           ref={mapRef}
           chokepoint={chokepoint}
@@ -269,6 +284,7 @@ export function ChartStage({
           quakes={oceanObservations.quakes}
           onMapReady={setMapInstance}
         />
+        </Suspense>
 
         <div className="map-grid-overlay" aria-hidden="true" />
         <div className="map-corner-bracket map-corner-bracket--tl" aria-hidden="true" />
