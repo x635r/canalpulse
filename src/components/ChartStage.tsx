@@ -26,6 +26,7 @@ const MapCanvas = lazy(() =>
 import { VesselDetail } from './VesselDetail'
 import { OceanPanel } from './OceanPanel'
 import { ChartGraticule } from './ChartGraticule'
+import { hasTss } from '../lib/tss'
 import { useChartProbe } from '../lib/useChartProbe'
 import type { LiveAisState } from '../lib/useLiveAis'
 import type { OceanObservationState } from '../lib/useOceanObservations'
@@ -140,6 +141,12 @@ function ModeLegend({
       <div className="legend-other">
         <span><i className="legend-line legend-line--route" /> CONVOY LANE</span>
         <span><i className="legend-ring" /> ANCHORAGE</span>
+        {hasTss(chokepoint.id) && (
+          <>
+            <span><i className="legend-box legend-box--inbound" /> INBOUND</span>
+            <span><i className="legend-box legend-box--outbound" /> OUTBOUND</span>
+          </>
+        )}
       </div>
     </>
   )
@@ -159,6 +166,7 @@ export function ChartStage({
   activeOceanLayers,
   onToggleOceanLayer,
   oceanObservations,
+  trackFrame,
   liveAis,
   liveAisOn,
   onToggleLiveAis,
@@ -179,6 +187,7 @@ export function ChartStage({
   activeOceanLayers: OceanLayerId[]
   onToggleOceanLayer: (id: OceanLayerId) => void
   oceanObservations: OceanObservationState
+  trackFrame: { mmsi: string; lon: number; lat: number }[] | null
   liveAis: LiveAisState
   liveAisOn: boolean
   onToggleLiveAis: () => void
@@ -282,6 +291,7 @@ export function ChartStage({
           activeOceanLayers={activeOceanLayers}
           buoys={oceanObservations.buoys}
           quakes={oceanObservations.quakes}
+          trackFrame={trackFrame}
           onMapReady={setMapInstance}
         />
         </Suspense>

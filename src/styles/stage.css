@@ -1762,3 +1762,13 @@
   font-style: normal;
   color: var(--muted-2);
 }
+
+.legend-box--inbound {
+  background: rgba(79, 214, 180, 0.45);
+  border-color: #4fd6b4;
+}
+
+.legend-box--outbound {
+  background: rgba(216, 184, 110, 0.45);
+  border-color: #d8b86e;
+}

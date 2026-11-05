@@ -7,6 +7,8 @@ import { ConvoyDock } from './components/ConvoyDock'
 import { BlockadeReplay } from './components/BlockadeReplay'
 import { QueuePanel, ChartProbe, ArchivePanel } from './components/RightRail'
 import { TideWindow } from './components/TideWindow'
+import { VoyagePlanner } from './components/VoyagePlanner'
+import { TrackPlayback } from './components/TrackPlayback'
 import { FooterTicker } from './components/FooterTicker'
 import { SourcesDrawer } from './components/SourcesDrawer'
 import { RailToggle } from './components/RailToggle'
@@ -67,6 +69,7 @@ function App() {
   const oceanObservations = useOceanObservations(true)
   const portWatch = usePortWatch()
   const tide = useTideForecast(chokepoint.id)
+  const [trackFrame, setTrackFrame] = useState<{ mmsi: string; lon: number; lat: number }[] | null>(null)
 
   const toggleOceanLayer = (id: OceanLayerId) => {
     setOceanLayers((current) =>
@@ -201,6 +204,7 @@ function App() {
             activeOceanLayers={modeOceanLayers}
             onToggleOceanLayer={toggleOceanLayer}
             oceanObservations={oceanObservations}
+            trackFrame={trackFrame}
             liveAis={liveAis}
             liveAisOn={liveAisOn}
             onToggleLiveAis={() => setLiveAisOn((value) => !value)}
@@ -275,6 +279,12 @@ function App() {
             )}
             vesselDraft={probeDraft}
           />
+          <TrackPlayback
+            liveVessels={liveAis.vessels}
+            active={liveAisOn}
+            onFrame={setTrackFrame}
+          />
+          <VoyagePlanner transits={portWatch.transits} />
           <ArchivePanel
             mode={mode}
             progress={reconProgress}

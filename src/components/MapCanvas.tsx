@@ -15,12 +15,13 @@ import {
 import type { Feature, FeatureCollection } from 'geojson'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type { Chokepoint, ChokepointId, MapMode, Vessel } from '../types'
+import type { Chokepoint, ChokepointId, LngLat, MapMode, Vessel } from '../types'
 import { everGiven } from '../data/blockade'
 import { vesselTypes } from '../data/fleet'
 import { chokepoints } from '../data/chokepoints'
 import { oceanLayers, type OceanLayerId } from '../data/oceanLayers'
 import type { BuoyObservation, SeismicEvent } from '../data/oceanObservations'
+import { buildTssGeometry, TSS_SPECS } from '../lib/tss'
 import { bearingBetween, circlePolygon, clamp, pathLength, pointAlong } from '../lib/geo'
 import { getReconState } from '../lib/blockade'
 import { chartStyle } from '../lib/mapStyle'
@@ -48,6 +49,8 @@ interface MapCanvasProps {
   /** Live buoy + seismic observations. */
   buoys: BuoyObservation[]
   quakes: SeismicEvent[]
+  /** Playback frame of recorded AIS positions, or null for live. */
+  trackFrame?: { mmsi: string; lon: number; lat: number }[] | null
   /** Playback multiplier over real time. 1 = true real-time. */
   timeScale: number
   onMapReady?: (map: MapLibreMap) => void
@@ -84,6 +87,7 @@ const QUAKE_SOURCE = 'cp-quakes'
 const QUAKE_LAYER = 'seismic-events'
 /** Raster layer id per ocean WMS layer. */
 const oceanLayerRasterId = (id: OceanLayerId) => `ocean-raster-${id}`
+const TSS_SOURCE = 'cp-tss'
 
 function featureCollection(features: Feature[]): FeatureCollection {
   return { type: 'FeatureCollection', features }
@@ -141,6 +145,27 @@ function oceanTileUrl(layerId: OceanLayerId): string | null {
     TIME: stamp,
   })
   return `${def.wms}?${params.toString()}`
+}
+
+/** Build inbound/outbound/separation polygons for the active waterway. */
+function tssFeatures(chokepoint: Chokepoint): FeatureCollection {
+  const spec = TSS_SPECS[chokepoint.id]
+  if (!spec) return featureCollection([])
+
+  const { inbound, outbound, separation } = buildTssGeometry(chokepoint.route, spec)
+  const ring = (coords: LngLat[]) => ({
+    type: 'Feature' as const,
+    properties: {},
+    geometry: { type: 'Polygon' as const, coordinates: [[...coords, coords[0]]] },
+  })
+
+  return featureCollection([
+    { ...ring(inbound), properties: { kind: 'inbound' } },
+    { ...ring(outbound), properties: { kind: 'outbound' } },
+    ...(spec.separationM > 0
+      ? [{ ...ring(separation), properties: { kind: 'separation' } }]
+      : []),
+  ])
 }
 
 function buoyFeatures(buoys: BuoyObservation[]): FeatureCollection {
@@ -378,6 +403,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     activeOceanLayers,
     buoys,
     quakes,
+    trackFrame,
     timeScale,
     onMapReady,
   },
@@ -461,6 +487,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
 
       const waypointSource = map.getSource(WAYPOINT_SOURCE) as GeoJSONSource | undefined
       waypointSource?.setData(waypointFeatures(target))
+
+      const tssSource = map.getSource(TSS_SOURCE) as GeoJSONSource | undefined
+      tssSource?.setData(tssFeatures(target))
 
       const reconSource = map.getSource(RECON_QUEUE_SOURCE) as GeoJSONSource | undefined
       const progress = mapModeRef.current === 'recon' ? reconStateRef.current : null
@@ -787,6 +816,40 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
           'circle-stroke-color': '#ff8a6a',
           'circle-stroke-width': 1,
           'circle-opacity': 0.85,
+        },
+      })
+
+      // TSS lanes: drawn under the centreline so the fairway stays readable.
+      map.addSource(TSS_SOURCE, { type: 'geojson', data: tssFeatures(initialChokepoint) })
+      map.addLayer({
+        id: 'tss-lanes',
+        type: 'fill',
+        source: TSS_SOURCE,
+        paint: {
+          'fill-color': [
+            'match',
+            ['get', 'kind'],
+            'inbound',
+            '#4fd6b4',
+            'outbound',
+            '#d8b86e',
+            'separation',
+            '#ff8368',
+            'rgba(0,0,0,0)',
+          ],
+          'fill-opacity': ['match', ['get', 'kind'], 'separation', 0.16, 0.09],
+        },
+      })
+      map.addLayer({
+        id: 'tss-boundary',
+        type: 'line',
+        source: TSS_SOURCE,
+        filter: ['==', ['get', 'kind'], 'separation'],
+        paint: {
+          'line-color': '#ff9c85',
+          'line-width': 0.8,
+          'line-opacity': 0.5,
+          'line-dasharray': [4, 3],
         },
       })
 
@@ -1153,6 +1216,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
       hidden('recon-queue')
     }
 
+    // TSS lanes belong to the traffic view; depth and recon views hide them.
+    const tssVisible = mode === 'flow' || mode === 'world'
+    if (map.getLayer('tss-lanes')) {
+      map.setLayoutProperty('tss-lanes', 'visibility', tssVisible ? 'visible' : 'none')
+      map.setLayoutProperty('tss-boundary', 'visibility', tssVisible ? 'visible' : 'none')
+    }
+
     // Seamarks stay on for every mode; in BATHY mode they are dimmed so the
     // depth band remains readable underneath the chart symbols.
     map.setPaintProperty(SEAMARK_LAYER, 'raster-opacity', mode === 'bathymetry' ? 0.55 : 0.86)
@@ -1239,6 +1309,29 @@ export const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function Ma
     if (!map || !loadedRef.current) return
     syncSources(chokepoint)
   }, [mode, reconProgress, chokepoint, syncSources])
+
+  // Track playback: when a frame is supplied, draw the recorded positions in
+  // place of the live feed so the operator is reviewing what was observed.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !loadedRef.current) return
+    const source = map.getSource(LIVE_AIS_SOURCE) as GeoJSONSource | undefined
+    if (!source) return
+
+    if (trackFrame && trackFrame.length > 0) {
+      source.setData(
+        featureCollection(
+          trackFrame.map((pos) => ({
+            type: 'Feature' as const,
+            properties: { type: 'container', color: '#8fe8d2', heading: 0 },
+            geometry: { type: 'Point' as const, coordinates: [pos.lon, pos.lat] },
+          })),
+        ),
+      )
+    } else {
+      source.setData(liveAisFeatures(liveVessels ?? []))
+    }
+  }, [trackFrame, liveVessels])
 
   // Toggle ocean data rasters / observation layers on demand.
   useEffect(() => {
