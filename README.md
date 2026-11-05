@@ -28,6 +28,15 @@ npm run preview
 
 技术栈：React 19 + TypeScript 7 + Vite 8 + MapLibre GL JS 6。生产构建会自动把 MapLibre worker 拆成独立资源；这里通过 `?worker&url` + `setWorkerUrl()` 解决 bundler 下的 MapLibre 6 worker 路径问题。
 
+### 测试
+
+```bash
+npm test          # vitest run，19 个用例
+npm run test:watch
+```
+
+覆盖 NDBC 定宽报文解析、haversine/航段插值、方位角与边界钳制。
+
 ### 部署（Cloudflare Pages）
 
 线上地址：<https://canalpulse.pages.dev>
@@ -83,7 +92,7 @@ npm run deploy:preview   # 部署到 preview 分支
 | [AISHub](https://www.aishub.net/api) | 船位 AIS 原始报文 | 需凭证，服务端代理 |
 | [MarineTraffic API](https://servicedocs.marinetraffic.com/) | 船位 / 港口事件 | 需凭证，服务端代理 |
 | [VesselFinder API](https://api.vesselfinder.com/docs/) | 船位 / 静态资料 | 需凭证，服务端代理 |
-| [IMF PortWatch](https://portwatch.imf.org/) | 港口扰动与咽喉流量基准 | 参考数据 |
+| [IMF PortWatch](https://portwatch.imf.org/) | 咽喉年度通行量与船型构成（**已接入**，主流量的真实来源） | 实时 API |
 | [Suez Canal Authority](https://www.suezcanal.gov.eg/English/Pages/default.aspx) | 编队、吃水限制、官方通告 | 参考数据 |
 | [Panama Canal Authority](https://www.pancanal.com/) | 船闸计划、加通湖水位 | 参考数据 |
 
@@ -173,6 +182,7 @@ src/
 
 - MapLibre 6 需要 WebGL2；无 WebGL2 时会显示备用海图底纹。
 - **航道几何精度**：苏伊士与巴拿马运河的中心线已替换为 OSM 实测水道几何（分别为 40 / 44 个节点），放大后与真实河岸重合。马六甲、博斯普鲁斯、霍尔木兹、直布罗陀、曼德、多佛仍为手工控制点近似，在 z12 以上放大时可能与真实水道有偏差。
+- **核心流量的数据来源**：八个咽喉的年通行量、日均通行、船型构成均来自 IMF PortWatch（ArcGIS FeatureServer）。`IN WATERWAY` 是由通行量与过境时长推导的估算值，界面标注 EST；实测值带绿点标记。
 - **实时 AIS 覆盖范围**：免费且支持浏览器直接访问的公开 AIS 源目前只有 Digitraffic（波罗的海）。AISHub / MarineTraffic / VesselFinder 均需凭证，因此全球实时船位需自建服务端代理，见「接入实时 AIS」一节。全球海图视图本身展示的是八个咽喉的态势数据，不是全球实时船位。
 - **OpenSeaMap 在 z10 以下不渲染**：其低缩放瓦片是整片紫红区域填充而非点状航海符号，会污染海图，因此限定 z10 起显示。
 - EMODnet WMS 只覆盖欧洲海域（含地中海与黑海），因此苏伊士与博斯普鲁斯用它；巴拿马与马六甲改用 GEBCO 全球网格，否则 BATHY 图层会是完全空白的。
