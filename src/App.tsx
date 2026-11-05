@@ -36,6 +36,7 @@ function App() {
   const [reconPlaying, setReconPlaying] = useState(false)
   const [selectionByChokepoint, setSelectionByChokepoint] = useState<Partial<Record<ChokepointId, string>>>({})
   const [draftOverride, setDraftOverride] = useState<{ id: string; value: number } | null>(null)
+  const [speedOverride, setSpeedOverride] = useState<number | null>(null)
   // The chart is the primary surface, so the sandbox dock starts collapsed and
   // only claims height when the operator opens it.
   const [dockOpen, setDockOpen] = useState(false)
@@ -78,6 +79,7 @@ function App() {
     if (!vessel) return
     setSelectionByChokepoint((current) => ({ ...current, [chokepoint.id]: vessel.id }))
     setDraftOverride(null)
+    setSpeedOverride(null)
   }
 
   const cycleVessel = (direction: -1 | 1) => {
@@ -252,9 +254,9 @@ function App() {
             selectedVessel={selectedVessel}
             onCycleVessel={cycleVessel}
             draft={probeDraft}
-            onDraft={(value) =>
-              setDraftOverride({ id: selectedVessel.id, value })
-            }
+            onDraft={(value) => setDraftOverride({ id: selectedVessel.id, value })}
+            speedOverride={speedOverride}
+            onSpeed={setSpeedOverride}
           />
           <ArchivePanel
             mode={mode}

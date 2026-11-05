@@ -1017,3 +1017,31 @@
   color: var(--accent);
   vertical-align: super;
 }
+
+/* Calculation transparency: show the squat/UKC basis so the verdict is auditable. */
+.ukc-basis {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line-faint);
+  font-family: var(--font-mono);
+  font-size: 5.2px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.ukc-basis em {
+  font-style: normal;
+  color: var(--muted-2);
+  font-size: 4.8px;
+}
+
+.speed-slider {
+  padding-top: 3px;
+}
+
+.speed-slider > div:first-child em {
+  color: var(--warning);
+}

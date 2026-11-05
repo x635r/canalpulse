@@ -11,6 +11,7 @@ import { everGiven, blockadeArchive } from '../data/blockade'
 import { heatmapTotal, vesselTypes } from '../data/fleet'
 import { formatMoney } from '../lib/geo'
 import { deriveSummaryMetrics, type ChokepointTransits } from '../data/portwatch'
+import { BLOCK_COEFFICIENT, computeUkc, waterwayClassFor } from '../lib/nautical'
 
 const typeOrder: VesselTypeId[] = ['container', 'bulk', 'lng', 'vlcc']
 const bucketLabels = ['0–6H', '6–12H', '12–24H', '24H+']
@@ -186,28 +187,6 @@ export function QueuePanel({
   )
 }
 
-function clearanceTone(ukc: number, minimum: number) {
-  if (ukc < minimum) {
-    return {
-      label: 'NO-GO',
-      className: 'alert',
-      note: 'Under-keel clearance below corridor minimum',
-    }
-  }
-  if (ukc < minimum + 1.1) {
-    return {
-      label: 'CAUTION',
-      className: 'warn',
-      note: 'Reduced margin. Monitor squat and bank effect',
-    }
-  }
-  return {
-    label: 'SAFE',
-    className: 'ok',
-    note: 'Clearance within authorised transit envelope',
-  }
-}
-
 function DepthSection({
   draft,
   chartDepth,
@@ -310,15 +289,40 @@ export function ChartProbe({
   onCycleVessel,
   draft,
   onDraft,
+  speedOverride,
+  onSpeed,
 }: {
   chokepoint: Chokepoint
   selectedVessel: Vessel
   onCycleVessel: (direction: -1 | 1) => void
   draft: number
   onDraft: (draft: number) => void
+  speedOverride: number | null
+  onSpeed: (value: number | null) => void
 }) {
-  const ukc = chokepoint.depth.chartDepth + chokepoint.depth.tidalAllowance - draft - chokepoint.depth.squat
-  const tone = clearanceTone(ukc, chokepoint.depth.minUkc)
+  // Real nautical computation: squat now depends on hull form and speed over
+  // ground instead of a per-waterway constant.
+  const waterway = waterwayClassFor(chokepoint.straitType, chokepoint.channel.lockChambers)
+  // UKC is assessed for the transit, not the anchorage: a hull at anchor has no
+  // squat at all. Default to a representative canal transit speed and let the
+  // operator override it, since squat scales with speed squared.
+  const transitSpeedKn = speedOverride ?? (selectedVessel.status === 'anchored' ? 7.5 : Math.max(selectedVessel.speed, 5))
+  const ukcResult = computeUkc({
+    chartDepth: chokepoint.depth.chartDepth,
+    tide: chokepoint.depth.tidalAllowance,
+    draft,
+    cb: BLOCK_COEFFICIENT[selectedVessel.type],
+    speedKn: transitSpeedKn,
+    waterway,
+    policyMinUkc: chokepoint.depth.minUkc,
+  })
+  const ukc = ukcResult.netUkc
+  const tone =
+    ukcResult.verdict === 'no-go'
+      ? { label: 'NO-GO', className: 'alert', note: `UKC 低于要求值 ${ukcResult.requiredUkc.toFixed(2)}m` }
+      : ukcResult.verdict === 'caution'
+        ? { label: 'CAUTION', className: 'warn', note: `余量仅 ${ukcResult.margin.toFixed(2)}m，注意下蹲与岸吸` }
+        : { label: 'SAFE', className: 'ok', note: `余量 ${ukcResult.margin.toFixed(2)}m，符合通航标准` }
   const minDraft = 8
   const maxDraft = chokepoint.depth.chartDepth + 1.5
 
@@ -360,7 +364,7 @@ export function ChartProbe({
         draft={draft}
         chartDepth={chokepoint.depth.chartDepth}
         tide={chokepoint.depth.tidalAllowance}
-        squat={chokepoint.depth.squat}
+        squat={ukcResult.squat}
         ukc={ukc}
       />
 
@@ -403,6 +407,40 @@ export function ChartProbe({
           <span>{((minDraft + maxDraft) / 2).toFixed(0)}M</span>
           <span>{maxDraft.toFixed(0)}M</span>
         </div>
+      </div>
+
+      <div className="draft-slider speed-slider">
+        <div>
+          <span>TRANSIT SPEED / 过境航速</span>
+          <em>SQUAT ∝ V²</em>
+        </div>
+        <input
+          type="range"
+          min={3}
+          max={14}
+          step="0.5"
+          value={transitSpeedKn}
+          aria-label="Transit speed over ground"
+          onChange={(event) => onSpeed(Number(event.target.value))}
+          style={
+            {
+              '--slider-progress': `${((transitSpeedKn - 3) / 11) * 100}%`,
+            } as CSSProperties
+          }
+        />
+        <div className="slider-scale">
+          <span>3KN</span>
+          <span>8.5KN</span>
+          <span>14KN</span>
+        </div>
+      </div>
+
+      <div className="ukc-basis">
+        <span>
+          squat {ukcResult.squat.toFixed(2)}m · {transitSpeedKn.toFixed(1)}kn · Cb{' '}
+          {BLOCK_COEFFICIENT[selectedVessel.type].toFixed(2)}
+        </span>
+        <em>req {ukcResult.requiredUkc.toFixed(2)}m · {ukcResult.basis}</em>
       </div>
 
       <div className={`probe-note probe-note--${tone.className}`}>
