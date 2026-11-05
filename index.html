@@ -16,13 +16,17 @@
       content="全球八大航运咽喉的机械仪表盘式态势操作台：精确海图、实时 AIS 船舶、编队过闸、压港热力、水深等深线与长赐号封锁推演。"
     />
     <meta property="og:type" content="website" />
-    <link
-      rel="preload"
-      as="style"
-      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap"
-      onload="this.onload=null;this.rel='stylesheet'"
-    />
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" /></noscript>
+    <!-- Fonts load async: they are cosmetic, never block first paint. -->
+    <script>
+      (function () {
+        var l = document.createElement('link')
+        l.rel = 'stylesheet'
+        l.href = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600&display=swap'
+        l.media = 'print'
+        l.onload = function () { this.media = 'all' }
+        document.head.appendChild(l)
+      })()
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://tiles.openfreemap.org" />
