@@ -1045,3 +1045,135 @@
 .speed-slider > div:first-child em {
   color: var(--warning);
 }
+
+/* ---------- tidal window ---------- */
+
+.tide-panel__station {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 0 5px;
+  font-family: var(--font-mono);
+  font-size: 5.6px;
+  color: var(--ink-dim);
+}
+
+.tide-panel__station span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tide-panel__station em {
+  font-style: normal;
+  font-size: 4.8px;
+  color: var(--muted-2);
+}
+
+.tide-curve {
+  width: 100%;
+  height: 34px;
+  display: block;
+  background: rgba(6, 26, 22, 0.5);
+  border: 1px solid var(--line-faint);
+}
+
+.tide-curve__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.tide-curve__threshold {
+  stroke: var(--warning);
+  stroke-width: 0.6;
+  stroke-dasharray: 2 2;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.8;
+}
+
+.tide-panel__range {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0 5px;
+  font-family: var(--font-mono);
+  font-size: 5px;
+  color: var(--muted-2);
+}
+
+.tide-panel__need {
+  color: var(--warning);
+}
+
+.tide-windows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line-faint);
+}
+
+.tide-window {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 5.4px;
+  color: var(--muted);
+}
+
+.tide-window__ok {
+  padding: 1px 4px;
+  border: 1px solid rgba(105, 223, 195, 0.4);
+  color: var(--accent);
+}
+
+.tide-window strong {
+  font-weight: 400;
+  color: var(--ink-dim);
+}
+
+.tide-window em {
+  margin-left: auto;
+  font-style: normal;
+  color: var(--muted-2);
+}
+
+.tide-window--none {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  color: var(--warning);
+}
+
+.tide-panel__unavailable strong {
+  display: block;
+  padding: 6px 0 3px;
+  font-family: var(--font-mono);
+  font-size: 6.4px;
+  font-weight: 400;
+  color: var(--warning);
+}
+
+.tide-panel__unavailable p {
+  margin: 0 0 4px;
+  font-family: var(--font-cn);
+  font-size: 7px;
+  line-height: 1.55;
+  color: var(--ink-dim);
+}
+
+.tide-panel__unavailable em {
+  font-family: var(--font-cn);
+  font-size: 6.4px;
+  font-style: normal;
+  color: var(--muted-2);
+}
+
+.tide-panel__pending {
+  margin: 8px 0;
+  font-family: var(--font-mono);
+  font-size: 5.6px;
+  color: var(--muted-2);
+}

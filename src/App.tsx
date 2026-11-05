@@ -6,6 +6,7 @@ import { ChartStage } from './components/ChartStage'
 import { ConvoyDock } from './components/ConvoyDock'
 import { BlockadeReplay } from './components/BlockadeReplay'
 import { QueuePanel, ChartProbe, ArchivePanel } from './components/RightRail'
+import { TideWindow } from './components/TideWindow'
 import { FooterTicker } from './components/FooterTicker'
 import { SourcesDrawer } from './components/SourcesDrawer'
 import { RailToggle } from './components/RailToggle'
@@ -16,6 +17,8 @@ import { useWeather } from './lib/useWeather'
 import { useLiveAis } from './lib/useLiveAis'
 import { useOceanObservations } from './lib/useOceanObservations'
 import { usePortWatch } from './lib/usePortWatch'
+import { useTideForecast } from './lib/useTideForecast'
+import { BLOCK_COEFFICIENT, squatBarrass, waterwayClassFor } from './lib/nautical'
 import { useUrlState } from './lib/useUrlState'
 import type { OceanLayerId } from './data/oceanLayers'
 import type { ChokepointId, MapMode } from './types'
@@ -63,6 +66,7 @@ function App() {
   const liveAis = useLiveAis(liveAisOn)
   const oceanObservations = useOceanObservations(true)
   const portWatch = usePortWatch()
+  const tide = useTideForecast(chokepoint.id)
 
   const toggleOceanLayer = (id: OceanLayerId) => {
     setOceanLayers((current) =>
@@ -257,6 +261,19 @@ function App() {
             onDraft={(value) => setDraftOverride({ id: selectedVessel.id, value })}
             speedOverride={speedOverride}
             onSpeed={setSpeedOverride}
+          />
+          <TideWindow
+            forecast={tide}
+            requiredTide={Math.max(
+              0,
+              chokepoint.depth.minUkc +
+                probeDraft -
+                chokepoint.depth.chartDepth +
+                // squat really is speed- and hull-dependent; use the same
+                // engine the UKC panel uses so the two never disagree.
+                squatBarrass(BLOCK_COEFFICIENT[selectedVessel.type], 7.5, waterwayClassFor(chokepoint.straitType, chokepoint.channel.lockChambers)),
+            )}
+            vesselDraft={probeDraft}
           />
           <ArchivePanel
             mode={mode}
